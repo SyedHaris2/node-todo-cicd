@@ -1,40 +1,39 @@
 # --- Stage 1: Builder ---
-# Use the current LTS version (replace 20 with the actual latest LTS if needed)
 FROM node:20-alpine AS builder
 
-# Set the working directory for the application
+# Set the working directory
 WORKDIR /app
 
-# Copy package.json and package-lock.json first to leverage Docker layer caching
+# 1. Copy package files first for caching
 COPY package*.json ./
 
-# Install dependencies
+# 2. Install dependencies (Node dependencies are cached here)
 RUN npm install
 
-# Copy the rest of the application source code
-COPY . .
-
-# (Optional) If you have a build step (like transpiling TypeScript or frontend assets), uncomment this:
-# RUN npm run build
+# 3. Copy only the root files and the views folder
+# We only copy the necessary source files and the views folder.
+COPY app.js ./
+COPY views ./views
 
 # --- Stage 2: Production Runtime ---
-# Use a minimal base image for the final runtime for the smallest size and better security
 FROM node:20-alpine AS production
 
 # Set the working directory
 WORKDIR /app
 
-# Copy only the necessary files from the builder stage
-# This includes the node_modules and built/source files
+# 4. Copy necessary runtime files from the builder stage
+# A. Copy node_modules
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/app.js ./
 
-# Best practice: Run the app as the non-root 'node' user
+# B. Copy main application files and the views folder
+COPY --from=builder /app/app.js ./
+COPY --from=builder /app/views ./views
+
+# 5. Security: Run the app as the non-root 'node' user
 USER node
 
-# Expose the application port
+# 6. Expose the application port
 EXPOSE 8000
 
-# Define the command to run the application
+# 7. Define the command to run the application
 CMD ["node", "app.js"]
