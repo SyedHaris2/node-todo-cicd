@@ -21,7 +21,8 @@ jobs:
 
       - name: Login to Amazon ECR Public
         run: |
-          aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_PUBLIC_REGISTRY }}
+          aws ecr-public get-login-password --region us-east-1 \
+          | docker login --username AWS --password-stdin ${{ secrets.ECR_PUBLIC_REGISTRY }}
 
       - name: Build Docker image
         run: |
@@ -42,8 +43,15 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_PUBLIC_REGISTRY }}
-            cd /apps/node-app
+            echo "Logging in to ECR..."
+            aws ecr-public get-login-password --region us-east-1 \
+            | docker login --username AWS --password-stdin ${{ secrets.ECR_PUBLIC_REGISTRY }}
+
+            echo "Pulling latest image..."
+            cd ~/node-todo-cicd
+
             docker-compose pull
-            docker-compose up -d
+            docker-compose up -d --remove-orphans
+
+            echo "Cleaning unused images..."
             docker system prune -f
