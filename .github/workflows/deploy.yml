@@ -21,8 +21,8 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      # 3️⃣ Login to ECR
-      - name: Login to Amazon ECR Public
+      # 3️⃣ Login to Amazon ECR
+      - name: Login to ECR Public
         run: |
           aws ecr-public get-login-password --region us-east-1 \
           | docker login --username AWS --password-stdin ${{ secrets.ECR_PUBLIC_REGISTRY }}
@@ -38,7 +38,7 @@ jobs:
           docker tag node-app:latest ${{ secrets.ECR_PUBLIC_REGISTRY }}/node-app:latest
 
       # 6️⃣ Push Docker image to ECR
-      - name: Push Docker image to ECR
+      - name: Push Docker image
         run: |
           docker push ${{ secrets.ECR_PUBLIC_REGISTRY }}/node-app:latest
 
@@ -59,12 +59,31 @@ jobs:
           echo "New task definition ARN: $TASK_DEF_ARN"
           echo "TASK_DEF_ARN=$TASK_DEF_ARN" >> $GITHUB_ENV
 
-      # 8️⃣ Update ECS Service
-      - name: Update ECS Service
+      # 8️⃣ Create ECS Service if it does not exist
+      - name: Ensure ECS Service Exists
         run: |
-          echo "Updating ECS service..."
-          aws ecs update-service \
-            --cluster node-app-cluster \
-            --service node-todo-app-service \
-            --task-definition ${{ env.TASK_DEF_ARN }} \
-            --force-new-deployment
+          SERVICE_NAME="node-todo-app-service"
+          CLUSTER_NAME="node-app-cluster"
+
+          EXISTS=$(aws ecs describe-services \
+            --cluster $CLUSTER_NAME \
+            --services $SERVICE_NAME \
+            --query "services[0].status" --output text)
+
+          if [ "$EXISTS" = "None" ]; then
+            echo "Service does not exist. Creating..."
+            aws ecs create-service \
+              --cluster $CLUSTER_NAME \
+              --service-name $SERVICE_NAME \
+              --task-definition ${{ env.TASK_DEF_ARN }} \
+              --desired-count 1 \
+              --launch-type FARGATE \
+              --network-configuration "awsvpcConfiguration={subnets=[subnet-0b0d683fb6f68f1a9,subnet-0825b7a4c10f68afe,subnet-028e6b87c25845919,subnet-0eae941f2a1893573,subnet-09a8b64c643b7525d,subnet-0d4cdb3fdaaaad3f9],securityGroups=[sg-0a57cf585cc553759],assignPublicIp=ENABLED}"
+          else
+            echo "Service exists. Updating service..."
+            aws ecs update-service \
+              --cluster $CLUSTER_NAME \
+              --service $SERVICE_NAME \
+              --task-definition ${{ env.TASK_DEF_ARN }} \
+              --force-new-deployment
+          fi
