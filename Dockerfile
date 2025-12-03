@@ -23,7 +23,6 @@ COPY --from=builder /app/node_modules ./node_modules
 # Copy actual app files
 COPY --from=builder /app/app.js ./
 COPY --from=builder /app/views ./views
-COPY --from=builder /app/public ./public
 
 # Run as non-root
 USER node
