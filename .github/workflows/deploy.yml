@@ -21,26 +21,23 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      # 3️⃣ Login to ECR
+      # 3️⃣ Login to ECR Public
       - name: Login to ECR Public
         run: |
           aws ecr-public get-login-password --region us-east-1 \
           | docker login --username AWS --password-stdin ${{ secrets.ECR_PUBLIC_REGISTRY }}
 
-      # 4️⃣ Build Docker image with commit SHA tag
-      - name: Build Docker image
+      # 4️⃣ Build with LATEST tag
+      - name: Build Docker Image (LATEST TAG)
         run: |
-          IMAGE_TAG=${GITHUB_SHA::7}
-          docker build -t node-app:$IMAGE_TAG .
-          docker tag node-app:$IMAGE_TAG ${{ secrets.ECR_PUBLIC_REGISTRY }}/node-app:$IMAGE_TAG
-          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+          docker build -t ${{ secrets.ECR_PUBLIC_REGISTRY }}/node-app:latest .
 
-      # 5️⃣ Push Docker image
-      - name: Push Docker image to ECR
+      # 5️⃣ Push latest
+      - name: Push Docker Image
         run: |
-          docker push ${{ secrets.ECR_PUBLIC_REGISTRY }}/node-app:${{ env.IMAGE_TAG }}
+          docker push ${{ secrets.ECR_PUBLIC_REGISTRY }}/node-app:latest
 
-      # 6️⃣ Register new ECS Task Definition
+      # 6️⃣ Register ECS Task Definition (LATEST)
       - name: Register ECS Task Definition
         id: task-def
         run: |
@@ -50,36 +47,16 @@ jobs:
             --network-mode awsvpc \
             --requires-compatibilities FARGATE \
             --cpu "1024" --memory "3072" \
-            --container-definitions "[{\"name\":\"node-container\",\"image\":\"${{ secrets.ECR_PUBLIC_REGISTRY }}/node-app:${{ env.IMAGE_TAG }}\",\"portMappings\":[{\"containerPort\":8000,\"protocol\":\"tcp\"},{\"containerPort\":80,\"protocol\":\"tcp\"}]}]" \
+            --container-definitions "[{\"name\":\"node-container\",\"image\":\"${{ secrets.ECR_PUBLIC_REGISTRY }}/node-app:latest\",\"portMappings\":[{\"containerPort\":8000,\"protocol\":\"tcp\"}]}]" \
             --query "taskDefinition.taskDefinitionArn" --output text)
 
           echo "TASK_DEF_ARN=$TASK_DEF_ARN" >> $GITHUB_ENV
 
-      # 7️⃣ Ensure ECS service exists or update
-      - name: Ensure ECS Service Exists / Update
+      # 7️⃣ Update ECS Service
+      - name: Update ECS Service
         run: |
-          SERVICE_NAME="node-todo-app-service"
-          CLUSTER_NAME="node-app-cluster"
-
-          EXISTS=$(aws ecs describe-services \
-            --cluster $CLUSTER_NAME \
-            --services $SERVICE_NAME \
-            --query "services[0].status" --output text)
-
-          if [ "$EXISTS" = "None" ]; then
-            echo "Service does not exist. Creating..."
-            aws ecs create-service \
-              --cluster $CLUSTER_NAME \
-              --service-name $SERVICE_NAME \
-              --task-definition ${{ env.TASK_DEF_ARN }} \
-              --desired-count 1 \
-              --launch-type FARGATE \
-              --network-configuration "awsvpcConfiguration={subnets=[subnet-0b0d683fb6f68f1a9,subnet-0825b7a4c10f68afe,subnet-028e6b87c25845919,subnet-0eae941f2a1893573,subnet-09a8b64c643b7525d,subnet-0d4cdb3fdaaaad3f9],securityGroups=[sg-0a57cf585cc553759],assignPublicIp=ENABLED}"
-          else
-            echo "Service exists. Updating..."
-            aws ecs update-service \
-              --cluster $CLUSTER_NAME \
-              --service $SERVICE_NAME \
-              --task-definition ${{ env.TASK_DEF_ARN }} \
-              --force-new-deployment
-          fi
+          aws ecs update-service \
+            --cluster node-app-cluster \
+            --service node-todo-app-service \
+            --task-definition ${{ env.TASK_DEF_ARN }} \
+            --force-new-deployment
