@@ -1,65 +1,85 @@
-name: Deploy to ECS
+name: Deploy Node App to ECS Fargate
 
 on:
   push:
-    branches:
-      - main
-
-env:
-  AWS_REGION: ap-south-1
-  ECR_REPOSITORY: node-todo
-  ECS_CLUSTER: node-todo-cluster
-  ECS_SERVICE: node-todo-service
+    branches: ["main"]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
+      # 1️⃣ Checkout repo
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+      # 2️⃣ Configure AWS credentials
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
 
-      # Build & push image with unique tag
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
-
-      - name: Build, tag, and push image
+      # 3️⃣ Login to ECR
+      - name: Login to ECR Public
         run: |
-          docker build -t $ECR_REPOSITORY:${{ github.sha }} .
-          docker tag $ECR_REPOSITORY:${{ github.sha }} ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:${{ github.sha }}
-          docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:${{ github.sha }}
+          aws ecr-public get-login-password --region us-east-1 \
+          | docker login --username AWS --password-stdin ${{ secrets.ECR_PUBLIC_REGISTRY }}
 
-      # Update ECS task definition
-      - name: Render ECS task definition
+      # 4️⃣ Build Docker image with commit SHA tag
+      - name: Build Docker image
+        run: |
+          IMAGE_TAG=${GITHUB_SHA::7}
+          docker build -t node-app:$IMAGE_TAG .
+          docker tag node-app:$IMAGE_TAG ${{ secrets.ECR_PUBLIC_REGISTRY }}/node-app:$IMAGE_TAG
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+
+      # 5️⃣ Push Docker image
+      - name: Push Docker image to ECR
+        run: |
+          docker push ${{ secrets.ECR_PUBLIC_REGISTRY }}/node-app:${{ env.IMAGE_TAG }}
+
+      # 6️⃣ Register new ECS Task Definition
+      - name: Register ECS Task Definition
         id: task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: taskdef.json
-          container-name: node-todo
-          image: ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:${{ github.sha }}
-
-      # Deploy new task
-      - name: Deploy Amazon ECS task definition
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-        with:
-          task-definition: ${{ steps.task-def.outputs.task-definition }}
-          service: $ECS_SERVICE
-          cluster: $ECS_CLUSTER
-          wait-for-service-stability: true
-
-      # Force update
-      - name: Force new deployment
         run: |
-          aws ecs update-service \
-            --cluster $ECS_CLUSTER \
-            --service $ECS_SERVICE \
-            --force-new-deployment \
-            --region $AWS_REGION
+          TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --family node-todo-app \
+            --execution-role-arn arn:aws:iam::628087992272:role/ecsTaskExecutionRole \
+            --network-mode awsvpc \
+            --requires-compatibilities FARGATE \
+            --cpu "1024" --memory "3072" \
+            --container-definitions "[{\"name\":\"node-container\",\"image\":\"${{ secrets.ECR_PUBLIC_REGISTRY }}/node-app:${{ env.IMAGE_TAG }}\",\"portMappings\":[{\"containerPort\":8000,\"protocol\":\"tcp\"},{\"containerPort\":80,\"protocol\":\"tcp\"}]}]" \
+            --query "taskDefinition.taskDefinitionArn" --output text)
+
+          echo "TASK_DEF_ARN=$TASK_DEF_ARN" >> $GITHUB_ENV
+
+      # 7️⃣ Ensure ECS service exists or update
+      - name: Ensure ECS Service Exists / Update
+        run: |
+          SERVICE_NAME="node-todo-app-service"
+          CLUSTER_NAME="node-app-cluster"
+
+          EXISTS=$(aws ecs describe-services \
+            --cluster $CLUSTER_NAME \
+            --services $SERVICE_NAME \
+            --query "services[0].status" --output text)
+
+          if [ "$EXISTS" = "None" ]; then
+            echo "Service does not exist. Creating..."
+            aws ecs create-service \
+              --cluster $CLUSTER_NAME \
+              --service-name $SERVICE_NAME \
+              --task-definition ${{ env.TASK_DEF_ARN }} \
+              --desired-count 1 \
+              --launch-type FARGATE \
+              --network-configuration "awsvpcConfiguration={subnets=[subnet-0b0d683fb6f68f1a9,subnet-0825b7a4c10f68afe,subnet-028e6b87c25845919,subnet-0eae941f2a1893573,subnet-09a8b64c643b7525d,subnet-0d4cdb3fdaaaad3f9],securityGroups=[sg-0a57cf585cc553759],assignPublicIp=ENABLED}"
+          else
+            echo "Service exists. Updating..."
+            aws ecs update-service \
+              --cluster $CLUSTER_NAME \
+              --service $SERVICE_NAME \
+              --task-definition ${{ env.TASK_DEF_ARN }} \
+              --force-new-deployment
+          fi
