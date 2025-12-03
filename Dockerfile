@@ -1,32 +1,34 @@
 # --- Stage 1: Builder ---
 FROM node:20-alpine AS builder
 
-# Set working directory
 WORKDIR /app
 
-# Copy package files and install dependencies
+# Install dependencies
 COPY package*.json ./
 RUN npm install
 
-# Copy all source files (app.js, views, routes, public, etc.)
+# Copy full project (app.js, views, routes, etc.)
 COPY . .
+
+# Force rebuild for EJS templates
+RUN touch /app/views/*
+
 
 # --- Stage 2: Production ---
 FROM node:20-alpine AS production
 
 WORKDIR /app
 
-# Copy node_modules from builder
+# Copy node_modules
 COPY --from=builder /app/node_modules ./node_modules
 
-# Copy all app files from builder
-COPY --from=builder /app ./
+# Copy application code
+COPY --from=builder /app/app.js ./app.js
+COPY --from=builder /app/views ./views
 
-# Run app as non-root
+# Run as non-root user
 USER node
 
-# Expose port
 EXPOSE 8000
 
-# Run the app
 CMD ["node", "app.js"]

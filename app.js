@@ -13,10 +13,18 @@ const port = 8000;
 let todolist = {};
 let todoId = 0;
 
+app.set('view cache', false);
+
 // --- Middleware Configuration ---
 app.use(bodyParser.urlencoded({
     extended: false
 }));
+
+app.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+
 
 // Configure method-override: required for using PUT/DELETE in HTML forms
 app.use(methodOverride((req, res) => {
@@ -88,6 +96,11 @@ app.get('/todo/edit/:id', (req, res) => {
         res.redirect('/todo');
     }
 });
+
+app.get('/version', (req, res) => {
+  res.send("Version: " + new Date());
+});
+
 
 // Edit item in the todo list (using PUT)
 app.put('/todo/edit/:id', (req, res) => {
