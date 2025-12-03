@@ -19,3 +19,63 @@ test
 
 
 
+```
+
+name: Deploy to EC2
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR Public
+        run: |
+          aws ecr-public get-login-password --region us-east-1 \
+          | docker login --username AWS --password-stdin ${{ secrets.ECR_PUBLIC_REGISTRY }}
+
+      - name: Build Docker image
+        run: |
+          docker build -t node-app .
+
+      - name: Tag image
+        run: |
+          docker tag node-app:latest ${{ secrets.ECR_PUBLIC_REGISTRY }}/node-app:latest
+
+      - name: Push image to ECR Public
+        run: |
+          docker push ${{ secrets.ECR_PUBLIC_REGISTRY }}/node-app:latest
+
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_IP }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            echo "Logging in to ECR..."
+            aws ecr-public get-login-password --region us-east-1 \
+            | docker login --username AWS --password-stdin ${{ secrets.ECR_PUBLIC_REGISTRY }}
+
+            echo "Pulling latest image..."
+            cd ~/node-todo-cicd
+
+            docker-compose pull
+            docker-compose up -d --remove-orphans
+
+            echo "Cleaning unused images..."
+            docker system prune -f
+```

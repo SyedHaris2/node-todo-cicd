@@ -1,4 +1,4 @@
-name: Deploy to ECS Fargate
+name: Deploy Node App to ECS Fargate
 
 on:
   push:
@@ -9,9 +9,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1️⃣ Checkout your repo
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 2️⃣ Configure AWS credentials
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -19,39 +21,50 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
+      # 3️⃣ Login to ECR
       - name: Login to Amazon ECR Public
         run: |
           aws ecr-public get-login-password --region us-east-1 \
           | docker login --username AWS --password-stdin ${{ secrets.ECR_PUBLIC_REGISTRY }}
 
+      # 4️⃣ Build Docker image
       - name: Build Docker image
         run: |
           docker build -t node-app .
 
-      - name: Tag image
+      # 5️⃣ Tag Docker image
+      - name: Tag Docker image
         run: |
           docker tag node-app:latest ${{ secrets.ECR_PUBLIC_REGISTRY }}/node-app:latest
 
-      - name: Push image to ECR Public
+      # 6️⃣ Push Docker image to ECR
+      - name: Push Docker image to ECR
         run: |
           docker push ${{ secrets.ECR_PUBLIC_REGISTRY }}/node-app:latest
 
-      - name: Deploy to ECS Fargate
+      # 7️⃣ Register new ECS Task Definition
+      - name: Register ECS Task Definition
+        id: task-def
         run: |
-          # Register a new task definition revision
+          echo "Registering new task definition..."
           TASK_DEF_ARN=$(aws ecs register-task-definition \
             --family node-todo-app \
-            --execution-role-arn arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskExecutionRole \
+            --execution-role-arn arn:aws:iam::628087992272:role/ecsTaskExecutionRole \
             --network-mode awsvpc \
             --requires-compatibilities FARGATE \
             --cpu "1024" --memory "3072" \
-            --container-definitions "[{\"name\":\"node-container\",\"image\":\"${{ secrets.ECR_PUBLIC_REGISTRY }}/node-app:latest\",\"portMappings\":[{\"containerPort\":8000,\"hostPort\":8000,\"protocol\":\"tcp\"},{\"containerPort\":80,\"hostPort\":80,\"protocol\":\"tcp\"}]}]" \
+            --container-definitions '[{"name":"node-container","image":"'"${{ secrets.ECR_PUBLIC_REGISTRY }}/node-app:latest"'","portMappings":[{"containerPort":8000,"protocol":"tcp"},{"containerPort":80,"protocol":"tcp"}]}]' \
             --query "taskDefinition.taskDefinitionArn" --output text)
 
           echo "New task definition ARN: $TASK_DEF_ARN"
+          echo "TASK_DEF_ARN=$TASK_DEF_ARN" >> $GITHUB_ENV
 
-          # Update ECS service to use the new task definition
+      # 8️⃣ Update ECS Service
+      - name: Update ECS Service
+        run: |
+          echo "Updating ECS service..."
           aws ecs update-service \
             --cluster node-app-cluster \
             --service node-todo-app-service \
-            --task-definition $TASK_DEF_ARN
+            --task-definition ${{ env.TASK_DEF_ARN }} \
+            --force-new-deployment
