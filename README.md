@@ -1,148 +1,257 @@
-# 🚀 Node.js Todo App – AWS ECS Fargate + Docker CI/CD
+# Node Todo App – AWS ECS (Fargate) Deployment
 
-Production-grade **containerised** Node.js application deployed on **AWS ECS Fargate** with **GitHub Actions CI/CD pipeline**, **immutable Docker images**, **CloudWatch logs** and **Git-managed task definitions**.
+A fully containerized **Node.js Todo application** (EJS-based UI) deployed on **Amazon ECS Fargate**, using **AWS ECR for image storage**, **Application Load Balancer** for traffic routing, **GitHub Actions for CI/CD**, and **CloudWatch Logs** for monitoring.
 
----
+This README covers:
 
-## ✨ Features
-- ✅ Add, edit, delete todos  
-- ✅ Sanitised input (XSS safe)  
-- ✅ RESTful routes (PUT/DELETE)  
-- ✅ EJS server-side rendering  
-- ✅ **Zero-downtime rolling updates**  
-- ✅ **Immutable Docker images** (SHA-based)  
-- ✅ **CloudWatch logs** per task  
-- ✅ **Task definition stored in Git** (IaC)
-
----
-
-## 📦 Container & AWS Highlights
-- **Multi-stage Dockerfile** (Alpine Linux) – minimal & fast  
-- **Unique SHA tag** on every build → **no “latest” cache issues**  
-- **AWS ECS Fargate** – serverless containers, **no EC2 to manage**  
-- **Task auto-registration** → **blue/green rolling deploys**  
-- **CloudWatch Logs** – **one log stream per task**  
-- **Task definition JSON** in repo → **infrastructure-as-code**
+* Architecture Overview
+* Local Development
+* Docker Build & ECR Push
+* AWS ECS Deployment (Fargate)
+* Load Balancer + Target Group Setup
+* GitHub Actions CI/CD workflow
+* IAM Roles
+* CloudWatch Logs
+* Accessing the App
+* Autoscaling (Optional)
+* Troubleshooting
 
 ---
 
-## 🏗️ Architecture Overview
+## 🚀 Architecture Diagram
+
 ```
-GitHub Push
-   ↓
-GitHub Actions (build & tag)
-   ↓
-Amazon ECR Public (main-<sha>)
-   ↓
-AWS ECS Fargate (rolling update)
-   ↓
-Amazon CloudWatch Logs (one stream per task)
+Developer → GitHub → GitHub Actions → ECR → ECS Service (Fargate) → ALB → User
 ```
 
 ---
 
-## 📺 30-sec Demo
-![demo](https://user-images.githubusercontent.com/YOUR_USER/YOUR_REPO/raw/branch/main/demo.gif)
+## 📁 Project Structure
 
-**Live URL (temporary IP)**  
-🔗 http://54.82.232.196:8000/todo
+```
+node-todo-app/
+├── .github/workflows/ (CI/CD pipeline)
+├── views/
+│   ├── edititem.ejs
+│   └── todo.ejs
+├── .gitignore
+├── Dockerfile
+├── README.md
+├── app.js
+├── docker-compose.yml
+├── package.json
+└── test.js
+```
 
 ---
 
-## 🚀 One-command Local Run
-```bash
-git clone https://github.com/YOUR_USER/node-todo-cicd.git
-cd node-todo-cicd
+## 🔧 Tech Stack
+
+* **Node.js** (Express + EJS templates)
+* **Docker** for container packaging
+* **AWS ECR** for storing images
+* **AWS ECS Fargate** for running containers
+* **AWS ALB** for HTTP routing
+* **AWS CloudWatch** for logs
+* **GitHub Actions** for CI/CD
+
+---
+
+## ▶️ Running Locally
+
+```
 npm install
 npm start
-# open http://localhost:8000/todo
+```
+
+Default URL:
+
+```
+http://localhost:8000
 ```
 
 ---
 
-## 🔁 Deployment Flow
-1. Push to `main`  
-2. GitHub Actions builds **unique SHA image**  
-3. **Renders task-definition.json** with new image tag  
-4. **Force-deploys** to **ECS Fargate** → new task starts, old task dies  
-5. **Health-check passes** → pipeline green  
-6. **Updated UI live** in ~2 min
+# 🐳 Docker Setup
 
----
+### Build Docker Image
 
-## 🛠️ Tech Stack
-| Layer | Tech |
-|-------|------|
-| Language | Node.js 20 |
-| View Engine | EJS |
-| **Container** | **Docker (multi-stage Alpine)** |
-| **Registry** | **Amazon ECR Public** |
-| **Orchestration** | **AWS ECS Fargate** |
-| **Logs** | **Amazon CloudWatch Logs** |
-| **Task Definition** | **JSON in repo (IaC)** |
-| CI/CD | GitHub Actions |
+```
+docker build -t node-todo-app .
+```
 
----
+### Run Locally
 
-## 📄 Task Definition (Infrastructure-as-Code)
-`task-definition.json` lives in the repo and is **rendered** on every push:
-
-```json
-{
-  "family": "node-todo-app",
-  "networkMode": "awsvpc",
-  "requiresCompatibilities": ["FARGATE"],
-  "cpu": "1024",
-  "memory": "3072",
-  "executionRoleArn": "arn:aws:iam::YOUR_ACCOUNT:role/ecsTaskExecutionRole",
-  "containerDefinitions": [
-    {
-      "name": "node-container",
-      "image": "PLACEHOLDER",               // ← injected by GitHub Actions
-      "portMappings": [{ "containerPort": 8000, "protocol": "tcp" }],
-      "logConfiguration": {
-        "logDriver": "awslogs",
-        "options": {
-          "awslogs-group": "/ecs/node-todo-app",
-          "awslogs-region": "us-east-1",
-          "awslogs-stream-prefix": "ecs"
-        }
-      }
-    }
-  ]
-}
+```
+docker run -p 8000:8000 node-todo-app
 ```
 
 ---
 
-## 📝 CloudWatch Logs
-- **One log stream per task** → easy debugging  
-- View in **ECS console** → Task → **Logs** tab  
-- Or CLI:  
-  ```bash
-  aws logs tail /ecs/node-todo-app --follow
-  ```
+# 🏗 AWS ECR Setup
+
+### 1. Authenticate Docker to ECR
+
+```
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
+```
+
+### 2. Push image with SHA tag
+
+```
+IMAGE_SHA=$(git rev-parse --short HEAD)
+docker tag node-todo-app:latest <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/node-todo-app:$IMAGE_SHA
+docker push <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/node-todo-app:$IMAGE_SHA
+```
 
 ---
 
-## 🌍 Roadmap
-- [ ] AWS Application Load Balancer + HTTPS  
-- [ ] Custom domain (Route 53)  
-- [ ] Terraform IaC  
-- [ ] Prometheus + Grafana monitoring  
-- [ ] Multi-environment (staging / prod)
+# 🚀 AWS ECS (Fargate) Deployment
+
+## ECS Cluster
+
+* **Cluster:** `node-app-cluster`
+
+## ECS Service
+
+* **Service Name:** `node-todo-app-service`
+* **Tasks:** Fargate
+* **Desired Count:** 1
+
+## Task Definition
+
+* **Family:** `node-todo-app`
+* **Revision:** `14`
+* **CPU:** 1 vCPU
+* **Memory:** 3GB
+* **Network Mode:** awsvpc
+* **Port:** `8000`
+* **Execution Role:** `ecsTaskExecutionRole`
 
 ---
 
-## 🤝 Contributing
-Feel free to open issues & pull requests.
+# 🌐 ALB + Target Group Setup
+
+## Application Load Balancer
+
+* **Name:** node-app-alb
+* **DNS:** `http://node-app-alb-77108825.us-east-1.elb.amazonaws.com`
+* **Listener:** HTTP:80 → node-app-tg
+
+## Target Group
+
+* **Name:** `node-app-tg`
+* **Target Type:** `ip`
+* **Port:** 8000
+* **Health Check Path:** `/`
+
+## Security Groups
+
+### ALB Security Group
+
+* Allow HTTP (80) from `0.0.0.0/0`
+
+### ECS Task Security Group
+
+* Allow port `8000` **ONLY from ALB SG**
 
 ---
 
-### Next 5-min checklist
-1. Fix EJS (`todo.item`) → commit / push  
-2. Record 10-sec screen capture → save as `demo.gif`  
-3. Replace `YOUR_USER`, `YOUR_REPO`, live IP → commit  
-4. Pin repo on GitHub profile & LinkedIn → **recruiter magnet**
+# 🔁 CI/CD – GitHub Actions
 
-**Done!**
+GitHub Actions workflow automatically:
+
+1. Builds Docker image
+2. Tags with Git SHA
+3. Pushes to ECR
+4. Updates ECS Service with `force-new-deployment`
+
+---
+
+# 🔐 IAM Roles
+
+### `ecsTaskExecutionRole`
+
+Required permissions:
+
+* ecr:GetAuthorizationToken
+* ecr:BatchCheckLayerAvailability
+* ecr:GetDownloadUrlForLayer
+* ecr:BatchGetImage
+* logs:CreateLogStream
+* logs:PutLogEvents
+
+---
+
+# 📊 CloudWatch Logs
+
+Log group:
+
+```
+/ecs/node-todo-app
+```
+
+Check logs via:
+
+```
+aws logs tail /ecs/node-todo-app --follow
+```
+
+---
+
+# 🌍 Accessing the Application
+
+Use the ALB DNS:
+
+```
+http://node-app-alb-77108825.us-east-1.elb.amazonaws.com/todo
+```
+
+---
+
+# 📈 ECS Autoscaling (Optional)
+
+* Min: 1
+* Max: 3
+* Policy: Target Tracking
+* CPU Target: 60%
+
+---
+
+# ❗ Troubleshooting Guide
+
+### 1. Target Group shows **Unhealthy**
+
+* Wrong health check path
+* App not listening on correct port
+* Security group misconfigured
+
+### 2. ALB shows **503**
+
+* No healthy targets
+
+### 3. ECS Task not starting
+
+Check events tab:
+
+```
+Service → Events
+```
+
+### 4. Debug task logs
+
+```
+aws logs tail /ecs/node-todo-app --follow
+```
+
+---
+
+# 📝 Author
+
+**Syed Haris**
+
+---
+
+# ✅ Status
+
+This deployment is live and functional using ECS Fargate + ALB.
