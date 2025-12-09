@@ -90,6 +90,9 @@ docker run -p 8000:8000 node-todo-app
 
 # 🏗 AWS ECR Setup
 
+<img width="1810" height="329" alt="ecr" src="https://github.com/user-attachments/assets/a6d77024-5105-4444-98ae-c8522da8e471" />
+
+
 ### 1. Authenticate Docker to ECR
 
 ```
@@ -107,6 +110,9 @@ docker push <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/node-todo-app:$IMAG
 ---
 
 # 🚀 AWS ECS (Fargate) Deployment
+
+<img width="1916" height="746" alt="ecs" src="https://github.com/user-attachments/assets/2579ef21-9c8c-4a33-a367-83aebfd1b6d3" />
+
 
 ## ECS Cluster
 
@@ -131,6 +137,9 @@ docker push <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/node-todo-app:$IMAG
 ---
 
 # 🌐 ALB + Target Group Setup
+
+<img width="1146" height="270" alt="alb" src="https://github.com/user-attachments/assets/e09a900d-9286-4bd7-93e7-28133086b9f8" />
+
 
 ## Application Load Balancer
 
@@ -240,17 +249,13 @@ Service → Events
 
 ### 4. Debug task logs
 
+<img width="1813" height="734" alt="logs" src="https://github.com/user-attachments/assets/1648a3df-8600-4bbc-ba9e-2d03ba71a28b" />
+
+
 ```
 aws logs tail /ecs/node-todo-app --follow
 ```
 
----
-
-# 📝 Author
-
-**Syed Haris**
-
----
 
 # ✅ Status
 
