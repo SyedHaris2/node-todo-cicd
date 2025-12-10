@@ -1,5 +1,8 @@
 # Node Todo App – AWS ECS (Fargate) Deployment
 
+> **Note:** All AWS services that generated charges (ALB, TG, ECS Service, Cluster) have been deleted to avoid billing. This README preserves the deployment steps and screenshots for learning and reference purposes.
+
+
 <img width="1919" height="923" alt="todo" src="https://github.com/user-attachments/assets/3997d47c-e4f0-4c4f-8b4c-296c7fcc8a62" />
 
 
@@ -265,4 +268,5 @@ aws logs tail /ecs/node-todo-app --follow
 
 # ✅ Status
 
-This deployment is live and functional using ECS Fargate + ALB.
+This README documents the full ECS Fargate deployment process.
+All AWS resources have been deleted to avoid charges, but the guide and screenshots remain for educational use..
