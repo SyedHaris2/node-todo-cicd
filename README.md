@@ -1,5 +1,8 @@
 # Node Todo App – AWS ECS (Fargate) Deployment
 
+<img width="1919" height="923" alt="todo" src="https://github.com/user-attachments/assets/3997d47c-e4f0-4c4f-8b4c-296c7fcc8a62" />
+
+
 A fully containerized **Node.js Todo application** (EJS-based UI) deployed on **Amazon ECS Fargate**, using **AWS ECR for image storage**, **Application Load Balancer** for traffic routing, **GitHub Actions for CI/CD**, and **CloudWatch Logs** for monitoring.
 
 This README covers:
