@@ -152,6 +152,9 @@ docker push <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/node-todo-app:$IMAG
 
 ## Target Group
 
+<img width="1916" height="831" alt="tg" src="https://github.com/user-attachments/assets/e7f63cea-26ca-4c2f-b668-655affed89f8" />
+
+
 * **Name:** `node-app-tg`
 * **Target Type:** `ip`
 * **Port:** 8000
